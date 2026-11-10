@@ -11,6 +11,7 @@ Newest on top. One entry per change: what, and why if it isn't obvious.
 - Docker waits for the hard drive (`RequiresMountsFor=/mnt/frame`), so it never writes to the SD card by mistake
 - Reboot test passed: photos come back on their own
 - Added crontab Night mode: screen off 11 PM, on 6 AM Pacific Time Zone.
+- Tailscale key expiry disabled, iPhone VPN On Demand on, GitHub 2FA on
 ## 2026-11-03: Basic setup working
 - Pi OS Lite 64-bit installed, Wi-Fi connected
 - Tailscale installed (signed in with GitHub), Tailscale SSH on

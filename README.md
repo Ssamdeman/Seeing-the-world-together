@@ -97,7 +97,7 @@ Photos, database and Docker data are on the hard drive, so they survive.
 9. Screen: `sudo apt install -y cage chromium`, `sudo useradd -m -G video,render,input kiosk`, copy `system/kiosk.service` to `/etc/systemd/system/`, then `sudo systemctl daemon-reload && sudo systemctl enable --now kiosk`.
 
 ## Known risks / to do
-- [ ] Tailscale: disable key expiry for the Pi. **It currently expires in about 5 months.**
+- [x] Tailscale: disable key expiry for the Pi. **It currently expires in about 5 months.**
 - [ ] Database backups sit on the same drive as the photos. Copy them somewhere else.
 - [ ] Wi-Fi at the frame's new home: needs a setup mode, or her Wi-Fi added ahead of time.
 - [ ] Night mode: screen off/on schedule
