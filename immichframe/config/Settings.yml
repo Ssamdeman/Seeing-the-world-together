@@ -1,0 +1,18 @@
+General:
+  Interval: 15
+  TransitionDuration: 2
+  ImageZoom: true
+  ShowClock: true
+  ShowPhotoDate: true
+  ShowImageDesc: true
+  ShowImageLocation: true
+  ShowPeopleDesc: false
+Accounts:
+  - ImmichServerUrl: http://immich_server:2283
+    ApiKeyFile: /app/Config/api.key
+    Albums:
+      - 0b5a23aa-206e-4ae7-9515-0db95c45dfca
+    ShowMemories: false
+    ShowFavorites: false
+    ShowArchived: false
+    ShowVideos: false

@@ -1,0 +1,17 @@
+name: immichframe
+services:
+  immichframe:
+    container_name: immichframe
+    image: ghcr.io/immichframe/immichframe:v1.0.39.0
+    user: "1000:1000"
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:9090:8080"
+    environment:
+      TZ: "America/Los_Angeles"
+    volumes:
+      - ./config:/app/Config
+networks:
+  default:
+    name: immich_default
+    external: true

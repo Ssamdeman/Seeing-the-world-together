@@ -1,0 +1,1 @@
+UUID=4f5a0497-3a0b-40ee-8164-de58e28b0f5d  /mnt/frame  ext4  defaults,noatime,nofail,x-systemd.device-timeout=10s  0  2
