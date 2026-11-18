@@ -2,6 +2,10 @@
 
 Newest on top. One entry per change: what, and why if it isn't obvious.
 
+## 2026-11-17: Kiosk logging, healthcheck, and daily refresh
+- Added Chromium logging (`--enable-logging --log-file=/mnt/frame/logs/kiosk/chromium.log --v=0`) and disabled background timer throttling in `kiosk.service` so browser/JS freezes can be diagnosed on the HDD without wearing out the SD card
+- Added `kiosk-refresh.timer` and `kiosk-refresh.service` to restart `kiosk.service` daily at 4:00 AM, preventing multi-day Chromium renderer stalls
+- Added a Docker `healthcheck` to `immichframe/docker-compose.yml` so container status reflects actual web UI availability
 
 ## 2026-11-09: Display working
 - ImmichFrame v1.0.39.0 in Docker, on Immich's network (`immich_default`), reads the album with a read-only API key
