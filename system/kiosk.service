@@ -1,6 +1,7 @@
 [Unit]
 Description=Photo frame display
-After=systemd-user-sessions.service docker.service getty@tty1.service
+After=systemd-user-sessions.service docker.service getty@tty1.service mnt-frame.mount
+Requires=mnt-frame.mount
 Conflicts=getty@tty1.service
 
 [Service]
@@ -13,7 +14,7 @@ StandardInput=tty-fail
 UtmpIdentifier=tty1
 UtmpMode=user
 ExecStartPre=/bin/sh -c 'until curl -sf http://localhost:2283/api/server/ping >/dev/null && curl -sf http://localhost:9090 >/dev/null; do sleep 3; done'
-ExecStart=/usr/bin/cage -- /usr/bin/chromium --kiosk --noerrdialogs --disable-infobars --no-first-run --ozone-platform=wayland http://localhost:9090
+ExecStart=/usr/bin/cage -- /usr/bin/chromium --kiosk --noerrdialogs --disable-infobars --no-first-run --ozone-platform=wayland --enable-logging --log-file=/mnt/frame/logs/kiosk/chromium.log --v=0 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-dev-shm-usage http://localhost:9090
 Restart=always
 RestartSec=5
 TimeoutStartSec=300

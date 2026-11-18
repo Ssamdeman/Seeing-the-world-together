@@ -18,8 +18,7 @@ iPhone (Immich app) --Tailscale--> Immich (Docker, port 2283)
                                        |
             kiosk.service: Cage + Chromium, full-screen --> screen
 ```
-
-## Where things live
+Where things live
 | What | Where |
 |---|---|
 | System + this repo | SD card, `~/frame` |
@@ -27,6 +26,7 @@ iPhone (Immich app) --Tailscale--> Immich (Docker, port 2283)
 | Database | `/mnt/frame/immich/postgres` |
 | Database auto-backups (daily 2 AM, keeps 14) | `/mnt/frame/immich/library/backups` |
 | Docker data | `/mnt/frame/docker` |
+| Kiosk browser logs | `/mnt/frame/logs/kiosk/chromium.log` |
 | Frame settings | `~/frame/immichframe/config/Settings.yml` |
 | Passwords + API key | **Password manager only. Never in git.** |
 
@@ -37,7 +37,6 @@ iPhone (Immich app) --Tailscale--> Immich (Docker, port 2283)
 - SSH: `ssh admin@raspberrypi` (over Tailscale)
 
 ## Repo layout
-```
 ~/frame/
 ├── README.md, CHANGELOG.md
 ├── .gitignore                 keeps .env and *.key out of git
@@ -51,11 +50,12 @@ iPhone (Immich app) --Tailscale--> Immich (Docker, port 2283)
 │       ├── Settings.yml       album ID, clock, notes, interval
 │       └── api.key            Immich API key (NOT in git)
 └── system/                    copies of Pi config files
-    ├── daemon.json            → /etc/docker/daemon.json
-    ├── docker-override.conf   → /etc/systemd/system/docker.service.d/override.conf
-    ├── fstab-line.txt         → add to /etc/fstab
-    └── kiosk.service          → /etc/systemd/system/kiosk.service
-```
+├── daemon.json            → /etc/docker/daemon.json
+├── docker-override.conf   → /etc/systemd/system/docker.service.d/override.conf
+├── fstab-line.txt         → add to /etc/fstab
+├── kiosk.service          → /etc/systemd/system/kiosk.service
+├── kiosk-refresh.service  → /etc/systemd/system/kiosk-refresh.service
+└── kiosk-refresh.timer    → /etc/systemd/system/kiosk-refresh.timer
 
 ## Everyday use
 - **Add a photo:** put it in the iPhone album, then open the Immich app.
@@ -66,7 +66,9 @@ iPhone (Immich app) --Tailscale--> Immich (Docker, port 2283)
 | Do | Command |
 |---|---|
 | Restart the screen | `sudo systemctl restart kiosk` |
-| Screen log | `journalctl -u kiosk -n 30` |
+| Screen service log | `journalctl -u kiosk -n 30` |
+| Chromium browser log | `tail -n 30 /mnt/frame/logs/kiosk/chromium.log` |
+| Daily refresh timer | `systemctl list-timers kiosk-refresh.timer` |
 | Immich status | `cd ~/frame/immich && docker compose ps` |
 | ImmichFrame log | `cd ~/frame/immichframe && docker compose logs --tail 30` |
 
@@ -94,11 +96,11 @@ Photos, database and Docker data are on the hard drive, so they survive.
 6. `git clone` this repo to `~/frame`.
 7. Immich: `cp immich/.env.example immich/.env`, put the DB password back in, then `docker compose up -d` in `immich/`.
 8. ImmichFrame: put the API key into `immichframe/config/api.key` (`chmod 600`), then `docker compose up -d` in `immichframe/`.
-9. Screen: `sudo apt install -y cage chromium`, `sudo useradd -m -G video,render,input kiosk`, copy `system/kiosk.service` to `/etc/systemd/system/`, then `sudo systemctl daemon-reload && sudo systemctl enable --now kiosk`.
+9. Screen: `sudo apt install -y cage chromium`, `sudo useradd -m -G video,render,input kiosk`, `sudo mkdir -p /mnt/frame/logs/kiosk && sudo chown -R kiosk:kiosk /mnt/frame/logs/kiosk`, copy `system/kiosk*` to `/etc/systemd/system/`, then `sudo systemctl daemon-reload && sudo systemctl enable --now kiosk kiosk-refresh.timer`.
 
 ## Known risks / to do
-- [x] Tailscale: disable key expiry for the Pi. **It currently expires in about 5 months.**
+- [x] Tailscale: disable key expiry for the Pi.
 - [ ] Database backups sit on the same drive as the photos. Copy them somewhere else.
 - [ ] Wi-Fi at the frame's new home: needs a setup mode, or her Wi-Fi added ahead of time.
-- [ ] Night mode: screen off/on schedule
+- [x] Night mode: screen off/on schedule (configured via crontab: off 11 PM, on 6 AM PT).
 - [ ] Immich update available (3.3.5 → 3.3.6)

@@ -1,0 +1,9 @@
+[Unit]
+Description=Restart kiosk display daily at 4 AM
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

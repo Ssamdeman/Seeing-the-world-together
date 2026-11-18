@@ -1,0 +1,6 @@
+[Unit]
+Description=Daily Kiosk Refresh
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart kiosk.service
