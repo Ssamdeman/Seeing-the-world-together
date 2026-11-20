@@ -1,0 +1,8 @@
+[Unit]
+Description=Photo frame Wi-Fi connectivity watchdog
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/wifi-watchdog.sh
