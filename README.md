@@ -102,5 +102,5 @@ Photos, database and Docker data are on the hard drive, so they survive.
 - [x] Tailscale: disable key expiry for the Pi.
 - [ ] Database backups sit on the same drive as the photos. Copy them somewhere else.
 - [ ] Wi-Fi at the frame's new home: needs a setup mode, or her Wi-Fi added ahead of time.
-- [x] Night mode: screen off/on schedule (configured via crontab: off 11 PM, on 6 AM PT).
+- [x] Night mode: screen off/on schedule (configured via crontab: off 2  AM, on 5 AM PT).
 - [ ] Immich update available (3.3.5 → 3.3.6)

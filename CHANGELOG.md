@@ -2,6 +2,16 @@
 
 Newest on top. One entry per change: what, and why if it isn't obvious.
 
+
+## 2026-11-18: Scheduled display power automation
+- Configured `kiosk` user crontab (`UID 1001`, `WAYLAND_DISPLAY=wayland-0`) to power off `HDMI-A-1` at 2:00 AM and power it back on at 5:00 AM PST via `wlr-randr`
+
+## 2026-11-17: Kiosk logging, healthcheck, daily refresh, and cursor fix
+- Added Chromium logging (`--enable-logging --log-file=/mnt/frame/logs/kiosk/chromium.log --v=0`) and disabled background timer throttling in `kiosk.service` so browser/JS freezes can be diagnosed on the HDD without wearing out the SD card
+- Added `kiosk-refresh.timer` and `kiosk-refresh.service` to restart `kiosk.service` daily at 4:00 AM, preventing multi-day Chromium renderer stalls
+- Added a TCP healthcheck to `immichframe/docker-compose.yml` so container status reflects actual web UI availability
+- Added `99-ignore-hdmi-cec.rules` (`udev`) to ignore HDMI-CEC virtual pointer devices (`vc4-hdmi-*`) in `libinput`, eliminating the persistent mouse cursor on the display
+
 ## 2026-11-17: Kiosk logging, healthcheck, and daily refresh
 - Added Chromium logging (`--enable-logging --log-file=/mnt/frame/logs/kiosk/chromium.log --v=0`) and disabled background timer throttling in `kiosk.service` so browser/JS freezes can be diagnosed on the HDD without wearing out the SD card
 - Added `kiosk-refresh.timer` and `kiosk-refresh.service` to restart `kiosk.service` daily at 4:00 AM, preventing multi-day Chromium renderer stalls

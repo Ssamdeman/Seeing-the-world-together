@@ -21,5 +21,5 @@
 # For more information see the manual pages of crontab(5) and cron(8)
 # 
 # m h  dom mon dow   command
-42 22 * * * XDG_RUNTIME_DIR=/run/user/1001 WAYLAND_DISPLAY=wayland-0 /usr/bin/wlr-randr --output HDMI-A-1 --off
-45 22 * * * XDG_RUNTIME_DIR=/run/user/1001 WAYLAND_DISPLAY=wayland-0 /usr/bin/wlr-randr --output HDMI-A-1 --on
+0 2 * * * XDG_RUNTIME_DIR=/run/user/1001 WAYLAND_DISPLAY=wayland-0 /usr/bin/wlr-randr --output HDMI-A-1 --off
+0 5 * * * XDG_RUNTIME_DIR=/run/user/1001 WAYLAND_DISPLAY=wayland-0 /usr/bin/wlr-randr --output HDMI-A-1 --on
