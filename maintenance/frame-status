@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+ok()   { printf "  ${GREEN}[OK]${NC}   %s\n" "$1"; }
+warn() { printf "  ${YELLOW}[WARN]${NC} %s\n" "$1"; }
+fail() { printf "  ${RED}[FAIL]${NC} %s\n" "$1"; }
+
+printf "${BOLD}=== PHOTO FRAME HEALTH CHECK (%s) ===${NC}\n\n" "$(date '+%Y-%m-%d %H:%M:%S')"
+
+# 1. Systemd Services & Timers
+printf "${BOLD}1. Systemd Services${NC}\n"
+for unit in kiosk.service kiosk-wrapper.service wifi-watchdog.timer tailscaled.service docker.service; do
+  if systemctl is-active --quiet "$unit"; then
+    ok "$unit is active"
+  else
+    fail "$unit is NOT active ($(systemctl is-active "$unit" 2>/dev/null || echo unknown))"
+  fi
+done
+if systemctl is-active --quiet wifi-portal.service; then
+  warn "wifi-portal.service is active (AP setup mode)"
+else
+  ok "wifi-portal.service is standby (inactive)"
+fi
+
+# 2. Docker Containers (Immich & ImmichFrame)
+printf "\n${BOLD}2. Docker Containers${NC}\n"
+for stack in /home/admin/frame/immich /home/admin/frame/immichframe; do
+  name=$(basename "$stack")
+  if [ -d "$stack" ]; then
+    bad=$(docker compose -f "$stack/docker-compose.yml" ps --format '{{.Name}}:{{.State}}' 2>/dev/null | grep -v ':running$' || true)
+    total=$(docker compose -f "$stack/docker-compose.yml" ps -q 2>/dev/null | wc -l)
+    if [ "$total" -gt 0 ] && [ -z "$bad" ]; then
+      ok "$name ($total containers running)"
+    else
+      fail "$name issue -> ${bad:-no containers running}"
+    fi
+  fi
+done
+
+# 3. Display Output (Wayland HDMI-A-1)
+printf "\n${BOLD}3. Display (HDMI-A-1)${NC}\n"
+if sudo -u kiosk test -S /run/user/1001/wayland-0; then
+  disp=$(sudo -u kiosk XDG_RUNTIME_DIR=/run/user/1001 WAYLAND_DISPLAY=wayland-0 wlr-randr 2>/dev/null | awk '/^HDMI-A-1/{f=1} f && /Enabled:/{print $2; exit}')
+  if [ "$disp" = "yes" ]; then
+    ok "HDMI-A-1 is ON (Enabled: yes)"
+  elif [ "$disp" = "no" ]; then
+    warn "HDMI-A-1 is OFF (sleep schedule or disabled)"
+  else
+    warn "HDMI-A-1 state unknown ($disp)"
+  fi
+else
+  fail "Wayland socket /run/user/1001/wayland-0 missing"
+fi
+
+# 4. Wi-Fi & Portal Mode
+printf "\n${BOLD}4. Wi-Fi & Portal State${NC}\n"
+wifi_con=$(nmcli -t -f NAME,DEVICE connection show --active 2>/dev/null | awk -F: '$2=="wlan0"{print $1; exit}')
+wifi_ip=$(ip -4 -o addr show wlan0 2>/dev/null | awk '{print $4}' | head -n1)
+if [ -n "$wifi_con" ] && [ "$wifi_con" != "Frame-Setup" ]; then
+  ok "Connected to '$wifi_con' (${wifi_ip:-no IP})"
+elif [ "$wifi_con" = "Frame-Setup" ]; then
+  warn "In AP Setup Mode: Frame-Setup (${wifi_ip:-10.42.0.1})"
+else
+  fail "wlan0 disconnected"
+fi
+
+if [ -f /run/frame-wifi/status.json ]; then
+  mode=$(python3 -c 'import json, sys; d=json.load(sys.stdin); print(d.get("mode",""), "-", d.get("message",""))' < /run/frame-wifi/status.json 2>/dev/null || echo "unreadable")
+  ok "Wrapper status: $mode"
+else
+  warn "Wrapper status: /run/frame-wifi/status.json not found"
+fi
+
+# 5. Hardware, Disk & Last Backup
+printf "\n${BOLD}5. Hardware, Disk & Backup${NC}\n"
+temp=$(vcgencmd measure_temp 2>/dev/null | cut -d= -f2 || echo "N/A")
+mem=$(free -h | awk '/^Mem:/{print $3 "/" $2}')
+root_df=$(df -h / | awk 'NR==2{print $3 "/" $2 " (" $5 ")"}')
+mnt_df=$(df -h /mnt/frame | awk 'NR==2{print $3 "/" $2 " (" $5 ")"}')
+ok "Temp: $temp | RAM: $mem"
+ok "Disk / : $root_df | /mnt/frame : $mnt_df"
+
+latest_bak=$(ls -t /mnt/frame/immich/library/backups/* 2>/dev/null | head -n1 || true)
+if [ -n "$latest_bak" ]; then
+  bak_time=$(stat -c '%y' "$latest_bak" | cut -d. -f1)
+  bak_size=$(du -h "$latest_bak" | awk '{print $1}')
+  ok "Last DB backup: $(basename "$latest_bak") ($bak_size, $bak_time)"
+else
+  warn "No DB backup found in /mnt/frame/immich/library/backups"
+fi
+
+# 6. Recent Warnings / Errors
+printf "\n${BOLD}6. Recent Log Alerts${NC}\n"
+alerts=$(grep -Eh '\[(ERROR|WARN)\]' /mnt/frame/logs/wifi/wifi.log 2>/dev/null | tail -n 3 || true)
+if [ -n "$alerts" ]; then
+  while IFS= read -r line; do
+    warn "$line"
+  done <<< "$alerts"
+else
+  ok "No recent WARN/ERROR entries in wifi.log"
+fi
+echo ""
