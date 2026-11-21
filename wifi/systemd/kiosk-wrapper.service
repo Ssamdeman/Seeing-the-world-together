@@ -1,0 +1,12 @@
+[Unit]
+Description=Photo frame kiosk Wi-Fi status wrapper (127.0.0.1:9091)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/kiosk-wrapper.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
