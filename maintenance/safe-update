@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO="/home/admin/frame"
+BACKUP_DIR="/mnt/frame/immich/library/backups"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+usage() {
+  echo "Usage:"
+  echo "  safe-update prep <tag>                  # Health check + DB dump + git tag"
+  echo "  safe-update apply <immich|immichframe>  # Pull, restart one stack, verify health"
+  echo "  safe-update rollback <tag>              # Revert files to <tag>, restart, show DB restore"
+  exit 1
+}
+
+[ $# -lt 2 ] && usage
+CMD="$1"
+ARG="$2"
+
+case "$CMD" in
+  prep)
+    TAG="$ARG"
+    printf "${BOLD}=== SAFE-UPDATE PREP (%s) ===${NC}\n\n" "$TAG"
+    /usr/local/bin/frame-status
+
+    cd "$REPO"
+    if git rev-parse "$TAG" >/dev/null 2>&1; then
+      printf "${RED}[ERROR] Git tag '%s' already exists. Pick a new tag name.${NC}\n" "$TAG"
+      exit 1
+    fi
+
+    sudo mkdir -p "$BACKUP_DIR"
+    DUMP_FILE="$BACKUP_DIR/pre-update-${TAG}-$(date +%Y%m%dT%H%M%S).sql.gz"
+    printf "${BOLD}Backing up Immich Postgres database...${NC}\n"
+    docker exec immich_postgres pg_dumpall --clean --if-exists --username=postgres | gzip > "/tmp/$(basename "$DUMP_FILE")"
+    sudo mv "/tmp/$(basename "$DUMP_FILE")" "$DUMP_FILE"
+    printf "${GREEN}[OK] Saved DB backup: %s (%s)${NC}\n" "$DUMP_FILE" "$(du -h "$DUMP_FILE" | awk '{print $1}')"
+
+    git tag -a "$TAG" -m "Pre-update snapshot before $TAG"
+    printf "${GREEN}[OK] Created Git tag: %s${NC}\n\n" "$TAG"
+    printf "${YELLOW}Next: edit version in immich/.env (and .env.example), then run: safe-update apply immich${NC}\n"
+    ;;
+
+  apply)
+    case "$ARG" in
+      immich|immichframe) STACK_DIR="$REPO/$ARG" ;;
+      *) echo "Target must be 'immich' or 'immichframe'"; exit 1 ;;
+    esac
+
+    printf "${BOLD}=== SAFE-UPDATE APPLY (%s) ===${NC}\n\n" "$ARG"
+    cd "$STACK_DIR"
+    docker compose pull
+    docker compose up -d
+    sleep 5
+    echo ""
+    /usr/local/bin/frame-status
+    printf "${YELLOW}Check the physical screen and iPhone app. If broken, run: safe-update rollback <tag>${NC}\n"
+    ;;
+
+  rollback)
+    TAG="$ARG"
+    cd "$REPO"
+    if ! git rev-parse "$TAG" >/dev/null 2>&1; then
+      printf "${RED}[ERROR] Git tag '%s' not found.${NC}\n" "$TAG"
+      exit 1
+    fi
+
+    printf "${BOLD}=== SAFE-UPDATE ROLLBACK TO %s ===${NC}\n\n" "$TAG"
+    git checkout "$TAG" -- immich/ immichframe/
+    printf "${GREEN}[OK] Restored immich/ and immichframe/ compose files from %s${NC}\n" "$TAG"
+    printf "${YELLOW}[NOTE] Remember to revert IMMICH_VERSION in immich/.env (not tracked in git), then restart containers.${NC}\n\n"
+
+    LATEST_DUMP=$(ls -t "$BACKUP_DIR"/pre-update-"${TAG}"*.sql.gz 2>/dev/null | head -n1 || true)
+    if [ -n "$LATEST_DUMP" ]; then
+      printf "${BOLD}To restore the database backup from before this update:${NC}\n"
+      echo "  cd $REPO/immich && docker compose stop immich-server immich-machine-learning"
+      echo "  gunzip -c \"$LATEST_DUMP\" | docker exec -i immich_postgres psql -U postgres"
+      echo "  docker compose up -d"
+    fi
+    ;;
+
+  *)
+    usage
+    ;;
+esac
