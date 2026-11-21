@@ -20,6 +20,7 @@ TEST_CON = "Frame-Setup-Test"
 AP_SSID = "Frame-Setup"
 AP_PASS = "frame-says-I-love-you"
 IFACE = "wlan0"
+CONNECT_LOCK = threading.Lock()
 
 
 def log_event(level, msg):
@@ -40,7 +41,7 @@ def read_json(path, default):
         return default
 
 
-def write_status(mode, message=""):
+def write_status(mode, message="", extra=None):
     os.makedirs(STATE_DIR, exist_ok=True)
     tmp = STATUS_FILE + ".tmp"
     data = {
@@ -50,16 +51,26 @@ def write_status(mode, message=""):
         "url": "http://10.42.0.1",
         "message": message,
     }
+    if extra:
+        data.update(extra)
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f)
     os.replace(tmp, STATUS_FILE)
 
 
 def attempt_connect(ssid, password):
-    time.sleep(1.5)
-    write_status("connecting", f"Testing connection to {ssid}...")
+    if not CONNECT_LOCK.acquire(blocking=False):
+        return
+    try:
+        _attempt_connect_impl(ssid, password)
+    finally:
+        CONNECT_LOCK.release()
 
-    # Clean up only any stale test profile, never an existing saved profile
+
+def _attempt_connect_impl(ssid, password):
+    time.sleep(1.5)
+    write_status("testing", f"Testing connection to {ssid}...")
+
     subprocess.run(["nmcli", "connection", "delete", TEST_CON], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(["nmcli", "connection", "down", AP_CON], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(1)
@@ -70,19 +81,27 @@ def attempt_connect(ssid, password):
 
     res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     if res.returncode == 0:
-        # Verified working: replace any prior profile for this SSID, rename TEST_CON -> ssid
         if ssid != TEST_CON:
-            subprocess.run(["nmcli", "connection", "delete", ssid], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            out = subprocess.check_output(["nmcli", "-t", "-f", "UUID,NAME,TYPE", "connection", "show"], text=True)
+            for line in out.splitlines():
+                parts = line.split(":")
+                if len(parts) >= 3 and parts[2] == "802-11-wireless":
+                    uid, cname = parts[0], parts[1]
+                    if cname == ssid or cname.startswith(ssid + " "):
+                        subprocess.run(["nmcli", "connection", "delete", "uuid", uid], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             subprocess.run(["nmcli", "connection", "modify", TEST_CON, "connection.id", ssid], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(["nmcli", "connection", "modify", ssid, "connection.autoconnect", "yes"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         with open(FAIL_FILE, "w", encoding="utf-8") as f:
             f.write("0\n")
-        write_status("connected", "")
-        log_event("INFO", f"Portal connected and saved Wi-Fi profile: {ssid}")
+        write_status(
+            "connected_wait",
+            f"Connected to {ssid}. Starting slideshow in 40 seconds...",
+            {"connected_ssid": ssid, "ready_at": time.time() + 40},
+        )
+        log_event("INFO", f"Portal connected and saved Wi-Fi profile: {ssid} (40s stability wait)")
         subprocess.Popen(["systemctl", "stop", "wifi-portal.service"])
         return
 
-    # Failed: delete ONLY TEST_CON so pre-existing saved Wi-Fi remains untouched
     subprocess.run(["nmcli", "connection", "delete", TEST_CON], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(["nmcli", "connection", "up", AP_CON], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     log_event("ERROR", f"Portal connection failed for SSID: {ssid} (wrong password or unreachable)")

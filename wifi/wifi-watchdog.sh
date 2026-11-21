@@ -9,7 +9,6 @@ PORTAL_SVC="wifi-portal.service"
 STATE_DIR="/run/frame-wifi"
 LOG_DIR="/mnt/frame/logs/wifi"
 LOG_FILE="$LOG_DIR/wifi.log"
-FAIL_FILE="$STATE_DIR/fail_count"
 RETRY_FILE="$STATE_DIR/retry_count"
 SCANS_FILE="$STATE_DIR/networks.json"
 STATUS_FILE="$STATE_DIR/status.json"
@@ -27,9 +26,22 @@ log_event() {
 write_status() {
   local mode="$1"
   local msg="${2:-}"
-  printf '{"mode":"%s","ssid":"%s","password":"%s","url":"http://10.42.0.1","message":"%s"}\n' \
-    "$mode" "$AP_SSID" "$AP_PASS" "$msg" > "$STATUS_FILE.tmp"
+  local extra="${3:-}"
+  if [ -n "$extra" ]; then
+    printf '{"mode":"%s","ssid":"%s","password":"%s","url":"http://10.42.0.1","message":"%s",%s}\n' \
+      "$mode" "$AP_SSID" "$AP_PASS" "$msg" "$extra" > "$STATUS_FILE.tmp"
+  else
+    printf '{"mode":"%s","ssid":"%s","password":"%s","url":"http://10.42.0.1","message":"%s"}\n' \
+      "$mode" "$AP_SSID" "$AP_PASS" "$msg" > "$STATUS_FILE.tmp"
+  fi
   mv "$STATUS_FILE.tmp" "$STATUS_FILE"
+}
+
+trigger_connected_wait() {
+  local ssid="$1"
+  local ready_at=$(( $(date +%s) + 40 ))
+  write_status "connected_wait" "Connected to $ssid. Starting slideshow in 40 seconds..." \
+    "\"connected_ssid\":\"$ssid\",\"ready_at\":$ready_at"
 }
 
 ensure_ap_profile() {
@@ -84,11 +96,16 @@ start_setup_mode() {
   systemctl restart "$PORTAL_SVC"
   echo 0 > "$RETRY_FILE"
   write_status "setup" "Connect to Wi-Fi $AP_SSID and open http://10.42.0.1"
-  log_event "ERROR" "Wi-Fi failed 4 consecutive checks; entered Frame-Setup AP mode (10.42.0.1)"
+  log_event "ERROR" "Wi-Fi failed 5 connection attempts; entered Frame-Setup AP mode (10.42.0.1)"
 }
 
 ACTIVE_CON=$(nmcli -t -f NAME,DEVICE connection show --active | awk -F: -v dev="$IFACE" '$2==dev {print $1; exit}')
-PREV_FAILS=$(cat "$FAIL_FILE" 2>/dev/null || echo 0)
+CUR_MODE=$(python3 -c 'import json; print(json.load(open("/run/frame-wifi/status.json")).get("mode",""))' 2>/dev/null || echo "")
+
+# Do not interrupt an active portal password test
+if [ "$CUR_MODE" = "testing" ]; then
+  exit 0
+fi
 
 # Case 1: Already in Frame-Setup AP mode
 if [ "$ACTIVE_CON" = "$AP_CON" ]; then
@@ -116,9 +133,8 @@ if [ "$ACTIVE_CON" = "$AP_CON" ]; then
 
   NEW_CON=$(nmcli -t -f NAME,DEVICE connection show --active | awk -F: -v dev="$IFACE" '$2==dev {print $1; exit}')
   if [ -n "$NEW_CON" ] && [ "$NEW_CON" != "$AP_CON" ]; then
-    echo 0 > "$FAIL_FILE"
-    write_status "connected" ""
-    log_event "INFO" "Auto-retry succeeded; reconnected to $NEW_CON"
+    trigger_connected_wait "$NEW_CON"
+    log_event "INFO" "Auto-retry succeeded; reconnected to $NEW_CON (40s stability wait)"
   else
     ensure_ap_profile
     nmcli connection up "$AP_CON" >/dev/null 2>&1 || true
@@ -133,23 +149,29 @@ fi
 # Case 2: Normal client Wi-Fi connected
 if [ -n "$ACTIVE_CON" ]; then
   systemctl stop "$PORTAL_SVC" >/dev/null 2>&1 || true
-  if [ "$PREV_FAILS" -gt 0 ]; then
-    log_event "INFO" "Wi-Fi recovered on $ACTIVE_CON after $PREV_FAILS failed check(s)"
-  fi
-  echo 0 > "$FAIL_FILE"
   echo 0 > "$RETRY_FILE"
-  write_status "connected" ""
+  if [ "$CUR_MODE" != "ready" ] && [ "$CUR_MODE" != "connected_wait" ] && [ "$CUR_MODE" != "connected" ]; then
+    trigger_connected_wait "$ACTIVE_CON"
+    log_event "INFO" "Wi-Fi connected to $ACTIVE_CON (40s stability wait)"
+  fi
   exit 0
 fi
 
-# Case 3: Disconnected — increment consecutive failure count
+# Case 3: Disconnected (at boot or runtime drop) — immediately hide slides and run 5 fast connection attempts
 systemctl stop "$PORTAL_SVC" >/dev/null 2>&1 || true
-FAILS=$((PREV_FAILS + 1))
-echo "$FAILS" > "$FAIL_FILE"
-write_status "disconnected" ""
+log_event "WARN" "Wi-Fi disconnected; starting 5 quick connection attempts"
 
-if [ "$FAILS" -lt 4 ]; then
-  log_event "WARN" "Wi-Fi disconnected (check $FAILS/4)"
-else
-  start_setup_mode
-fi
+for ATTEMPT in 1 2 3 4 5; do
+  write_status "disconnected" "Connecting to saved Wi-Fi (Attempt $ATTEMPT/5)..."
+  nmcli device connect "$IFACE" >/dev/null 2>&1 || true
+  sleep 6
+  NEW_CON=$(nmcli -t -f NAME,DEVICE connection show --active | awk -F: -v dev="$IFACE" '$2==dev {print $1; exit}')
+  if [ -n "$NEW_CON" ] && [ "$NEW_CON" != "$AP_CON" ]; then
+    echo 0 > "$RETRY_FILE"
+    trigger_connected_wait "$NEW_CON"
+    log_event "INFO" "Wi-Fi connected on attempt $ATTEMPT/5 to $NEW_CON (40s stability wait)"
+    exit 0
+  fi
+done
+
+start_setup_mode

@@ -1,10 +1,10 @@
 [Unit]
-Description=Run photo frame Wi-Fi watchdog every minute
+Description=Run photo frame Wi-Fi watchdog at boot and every minute
 
 [Timer]
-OnBootSec=45s
+OnBootSec=5s
 OnUnitActiveSec=1min
-AccuracySec=5s
+AccuracySec=2s
 
 [Install]
 WantedBy=timers.target
