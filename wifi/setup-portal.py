@@ -15,7 +15,7 @@ FAIL_FILE = os.path.join(STATE_DIR, "fail_count")
 AP_CON = "Frame-Setup"
 TEST_CON = "Frame-Setup-Test"
 AP_SSID = "Frame-Setup"
-AP_PASS = "frame-Says-Iloveyou"
+AP_PASS = "frame-says-I-love-you"
 IFACE = "wlan0"
 
 
