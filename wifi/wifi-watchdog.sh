@@ -4,7 +4,7 @@ set -euo pipefail
 IFACE="wlan0"
 AP_CON="Frame-Setup"
 AP_SSID="Frame-Setup"
-AP_PASS="frame-Says-Iloveyou"
+AP_PASS="frame-says-I-love-you"
 STATE_DIR="/run/frame-wifi"
 FAIL_FILE="$STATE_DIR/fail_count"
 RETRY_FILE="$STATE_DIR/retry_count"
