@@ -2,6 +2,11 @@
 
 Newest on top. One entry per change: what, and why if it isn't obvious.
 
+## 2026-11-21: Maintenance suite (M1-M3) and Immich v3 update
+- Added `maintenance/frame-status` (`/usr/local/bin/frame-status`) for single-screen read-only health checks across systemd units, Docker stacks, Wayland `HDMI-A-1` state, Wi-Fi wrapper mode, thermals/disk, and latest DB backup
+- Added `maintenance/deploy` (`/usr/local/bin/deploy`) for dry-run diffing and selective syncing/reloading from `~/frame` to live system paths and `kiosk` crontab
+- Added `maintenance/safe-update` (`/usr/local/bin/safe-update`) for pre-update DB dumps + Git tags (`prep`), single-stack updates (`apply`), and tagged rollbacks (`rollback`), and verified with an Immich `v3` update
+
 ## 2026-11-21: Wi-Fi captive portal, watchdog recovery, and kiosk display gating
 - Configured `Frame-Setup` AP mode (`10.42.0.1`) on 2.4 GHz Channel 6 with PMF disabled (`pmf disable`, `group ccmp`) and captive-portal probe redirects (`/hotspot-detect.html`, `/generate_204`, `/connecttest.txt`, `/ncsi.txt`) for seamless mobile setup
 - Replaced the 4-minute startup wait with a 5-attempt rapid connection loop (`OnBootSec=5s`) in `wifi-watchdog.sh` that enters `Frame-Setup` AP mode immediately on failure and auto-retries saved Wi-Fi every 15 minutes when idle
