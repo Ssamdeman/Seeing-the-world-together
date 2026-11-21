@@ -28,7 +28,12 @@ ensure_ap_profile() {
       autoconnect no ssid "$AP_SSID" \
       802-11-wireless.mode ap 802-11-wireless.band bg \
       ipv4.method shared ipv4.addresses 10.42.0.1/24 \
-      wifi-sec.key-mgmt wpa-psk wifi-sec.psk "$AP_PASS" >/dev/null
+      wifi-sec.key-mgmt wpa-psk wifi-sec.proto rsn wifi-sec.pairwise ccmp \
+      wifi-sec.wps-method disabled wifi-sec.psk "$AP_PASS" >/dev/null
+  else
+    nmcli connection modify "$AP_CON" \
+      ssid "$AP_SSID" wifi-sec.key-mgmt wpa-psk wifi-sec.proto rsn \
+      wifi-sec.pairwise ccmp wifi-sec.wps-method disabled wifi-sec.psk "$AP_PASS" >/dev/null
   fi
 }
 
