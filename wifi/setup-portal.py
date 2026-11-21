@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from datetime import datetime
 import html
 import json
 import os
@@ -6,9 +7,11 @@ import subprocess
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlparse
 
 STATE_DIR = "/run/frame-wifi"
+LOG_DIR = "/mnt/frame/logs/wifi"
+LOG_FILE = os.path.join(LOG_DIR, "wifi.log")
 SCANS_FILE = os.path.join(STATE_DIR, "networks.json")
 STATUS_FILE = os.path.join(STATE_DIR, "status.json")
 FAIL_FILE = os.path.join(STATE_DIR, "fail_count")
@@ -17,6 +20,16 @@ TEST_CON = "Frame-Setup-Test"
 AP_SSID = "Frame-Setup"
 AP_PASS = "frame-says-I-love-you"
 IFACE = "wlan0"
+
+
+def log_event(level, msg):
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"{ts} [{level}] {msg}\n")
+    except Exception:
+        pass
 
 
 def read_json(path, default):
@@ -65,12 +78,14 @@ def attempt_connect(ssid, password):
         with open(FAIL_FILE, "w", encoding="utf-8") as f:
             f.write("0\n")
         write_status("connected", "")
+        log_event("INFO", f"Portal connected and saved Wi-Fi profile: {ssid}")
         subprocess.Popen(["systemctl", "stop", "wifi-portal.service"])
         return
 
     # Failed: delete ONLY TEST_CON so pre-existing saved Wi-Fi remains untouched
     subprocess.run(["nmcli", "connection", "delete", TEST_CON], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(["nmcli", "connection", "up", AP_CON], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    log_event("ERROR", f"Portal connection failed for SSID: {ssid} (wrong password or unreachable)")
     write_status("setup", f"Could not connect to {ssid}. Check password and try again.")
 
 
@@ -135,6 +150,13 @@ class PortalHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        parsed = urlparse(self.path)
+        if parsed.path in ("/hotspot-detect.html", "/generate_204", "/gen_204", "/connecttest.txt", "/ncsi.txt"):
+            self.send_response(302)
+            self.send_header("Location", "http://10.42.0.1/")
+            self.end_headers()
+            return
+
         status = read_json(STATUS_FILE, {})
         msg = status.get("message", "")
         err = msg if "Could not connect" in msg else ""
