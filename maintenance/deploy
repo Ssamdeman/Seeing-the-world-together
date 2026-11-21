@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO="/home/admin/frame"
+APPLY=0
+if [ "${1:-}" = "--apply" ]; then
+  APPLY=1
+elif [ -n "${1:-}" ]; then
+  echo "Usage: deploy [--apply]"
+  exit 1
+fi
+
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# Format: "repo_rel_path|live_dest|mode|reload_tag"
+MAPPINGS=(
+  "wifi/kiosk-wrapper.py|/usr/local/bin/kiosk-wrapper.py|0755|kiosk-wrapper"
+  "wifi/setup-portal.py|/usr/local/bin/setup-portal.py|0755|wifi-portal"
+  "wifi/wifi-watchdog.sh|/usr/local/bin/wifi-watchdog.sh|0755|none"
+  "maintenance/frame-status|/usr/local/bin/frame-status|0755|none"
+  "maintenance/deploy|/usr/local/bin/deploy|0755|none"
+  "wifi/systemd/kiosk-wrapper.service|/etc/systemd/system/kiosk-wrapper.service|0644|systemd-kiosk-wrapper"
+  "wifi/systemd/wifi-portal.service|/etc/systemd/system/wifi-portal.service|0644|systemd-wifi-portal"
+  "wifi/systemd/wifi-watchdog.service|/etc/systemd/system/wifi-watchdog.service|0644|systemd"
+  "wifi/systemd/wifi-watchdog.timer|/etc/systemd/system/wifi-watchdog.timer|0644|systemd-watchdog-timer"
+  "system/kiosk.service|/etc/systemd/system/kiosk.service|0644|systemd-kiosk"
+  "system/kiosk-refresh.service|/etc/systemd/system/kiosk-refresh.service|0644|systemd"
+  "system/kiosk-refresh.timer|/etc/systemd/system/kiosk-refresh.timer|0644|systemd-refresh-timer"
+  "system/daemon.json|/etc/docker/daemon.json|0644|docker"
+  "system/docker-override.conf|/etc/systemd/system/docker.service.d/override.conf|0644|systemd-docker"
+  "system/99-ignore-hdmi-cec.rules|/etc/udev/rules.d/99-ignore-hdmi-cec.rules|0644|udev"
+)
+
+CHANGED=0
+TAGS=""
+
+printf "${BOLD}=== REPO -> PI SYNC CHECK (%s) ===${NC}\n\n" "$( [ "$APPLY" -eq 1 ] && echo "APPLY MODE" || echo "DRY-RUN DIFF" )"
+
+for entry in "${MAPPINGS[@]}"; do
+  IFS='|' read -r rel dest mode tag <<< "$entry"
+  src="$REPO/$rel"
+  [ -f "$src" ] || continue
+
+  if [ ! -f "$dest" ] || ! sudo cmp -s "$src" "$dest"; then
+    CHANGED=$((CHANGED + 1))
+    TAGS="$TAGS $tag"
+    printf "${YELLOW}[DIFF]${NC} %s -> %s\n" "$rel" "$dest"
+    if [ -f "$dest" ]; then
+      sudo diff -u "$dest" "$src" || true
+    else
+      echo "  (destination file does not exist yet)"
+    fi
+    if [ "$APPLY" -eq 1 ]; then
+      sudo mkdir -p "$(dirname "$dest")"
+      sudo install -m "$mode" "$src" "$dest"
+      printf "  ${GREEN}-> Installed (%s)${NC}\n" "$mode"
+    fi
+  else
+    printf "${GREEN}[SYNC]${NC} %s\n" "$rel"
+  fi
+done
+
+# Check kiosk user crontab
+CRON_SRC="$REPO/system/kiosk-crontab.txt"
+if [ -f "$CRON_SRC" ]; then
+  CUR_CRON=$(sudo crontab -u kiosk -l 2>/dev/null || true)
+  REPO_CRON=$(cat "$CRON_SRC")
+  if [ "$CUR_CRON" != "$REPO_CRON" ]; then
+    CHANGED=$((CHANGED + 1))
+    printf "${YELLOW}[DIFF]${NC} system/kiosk-crontab.txt -> crontab -u kiosk\n"
+    diff -u <(printf "%s\n" "$CUR_CRON") "$CRON_SRC" || true
+    if [ "$APPLY" -eq 1 ]; then
+      sudo crontab -u kiosk "$CRON_SRC"
+      printf "  ${GREEN}-> Updated kiosk crontab${NC}\n"
+    fi
+  else
+    printf "${GREEN}[SYNC]${NC} system/kiosk-crontab.txt\n"
+  fi
+fi
+
+# Check fstab line presence
+FSTAB_SRC="$REPO/system/fstab-line.txt"
+if [ -f "$FSTAB_SRC" ]; then
+  FSTAB_LINE=$(grep -v '^\s*#' "$FSTAB_SRC" | head -n1 || true)
+  if [ -n "$FSTAB_LINE" ] && ! grep -Fqx "$FSTAB_LINE" /etc/fstab; then
+    printf "${YELLOW}[WARN]${NC} system/fstab-line.txt not found verbatim in /etc/fstab (manual check)\n"
+  else
+    printf "${GREEN}[SYNC]${NC} system/fstab-line.txt\n"
+  fi
+fi
+
+echo ""
+if [ "$CHANGED" -eq 0 ]; then
+  printf "${GREEN}Everything is in sync between ~/frame and the Pi.${NC}\n"
+  exit 0
+fi
+
+if [ "$APPLY" -eq 0 ]; then
+  printf "${YELLOW}%d item(s) differ. Run 'deploy --apply' to install and reload.${NC}\n" "$CHANGED"
+  exit 0
+fi
+
+# Selective reloads based on what actually changed
+case " $TAGS " in *" systemd"*) sudo systemctl daemon-reload; echo "Reloaded systemd daemon." ;; esac
+case " $TAGS " in *" kiosk-wrapper"*|*" systemd-kiosk-wrapper"*) sudo systemctl restart kiosk-wrapper.service; echo "Restarted kiosk-wrapper.service." ;; esac
+case " $TAGS " in *" wifi-portal"*|*" systemd-wifi-portal"*)
+  if systemctl is-active --quiet wifi-portal.service; then
+    sudo systemctl restart wifi-portal.service; echo "Restarted active wifi-portal.service."
+  fi ;; esac
+case " $TAGS " in *" systemd-watchdog-timer"*) sudo systemctl restart wifi-watchdog.timer; echo "Restarted wifi-watchdog.timer." ;; esac
+case " $TAGS " in *" systemd-refresh-timer"*) sudo systemctl restart kiosk-refresh.timer; echo "Restarted kiosk-refresh.timer." ;; esac
+case " $TAGS " in *" systemd-kiosk"*) sudo systemctl restart kiosk.service; echo "Restarted kiosk.service." ;; esac
+case " $TAGS " in *" udev"*) sudo udevadm control --reload-rules; echo "Reloaded udev rules." ;; esac
+case " $TAGS " in *" docker"*|*" systemd-docker"*) printf "${YELLOW}[NOTE]${NC} Docker config updated; restart docker manually when safe.\n" ;; esac
+
+printf "${GREEN}Deploy complete (%d item(s) applied).${NC}\n" "$CHANGED"
