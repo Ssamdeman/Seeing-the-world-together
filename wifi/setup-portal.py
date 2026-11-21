@@ -129,6 +129,11 @@ class PortalHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         return
 
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.end_headers()
+
     def do_GET(self):
         status = read_json(STATUS_FILE, {})
         msg = status.get("message", "")
@@ -178,5 +183,12 @@ class PortalHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    server = ThreadingHTTPServer(("10.42.0.1", 80), PortalHandler)
+    for _ in range(20):
+        try:
+            server = ThreadingHTTPServer(("10.42.0.1", 80), PortalHandler)
+            break
+        except OSError:
+            time.sleep(0.5)
+    else:
+        server = ThreadingHTTPServer(("10.42.0.1", 80), PortalHandler)
     server.serve_forever()

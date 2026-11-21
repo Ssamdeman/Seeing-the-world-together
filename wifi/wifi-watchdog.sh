@@ -85,7 +85,7 @@ if [ "$ACTIVE_CON" = "$AP_CON" ]; then
 
   RETRIES=$(cat "$RETRY_FILE" 2>/dev/null || echo 0)
   RETRIES=$((RETRIES + 1))
-  if [ "$RETRIES" -lt 5 ]; then
+  if [ "$RETRIES" -lt 15 ]; then
     echo "$RETRIES" > "$RETRY_FILE"
     exit 0
   fi
