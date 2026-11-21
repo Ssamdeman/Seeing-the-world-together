@@ -2,6 +2,12 @@
 
 Newest on top. One entry per change: what, and why if it isn't obvious.
 
+## 2026-11-21: Wi-Fi captive portal, watchdog recovery, and kiosk display gating
+- Configured `Frame-Setup` AP mode (`10.42.0.1`) on 2.4 GHz Channel 6 with PMF disabled (`pmf disable`, `group ccmp`) and captive-portal probe redirects (`/hotspot-detect.html`, `/generate_204`, `/connecttest.txt`, `/ncsi.txt`) for seamless mobile setup
+- Replaced the 4-minute startup wait with a 5-attempt rapid connection loop (`OnBootSec=5s`) in `wifi-watchdog.sh` that enters `Frame-Setup` AP mode immediately on failure and auto-retries saved Wi-Fi every 15 minutes when idle
+- Updated `kiosk-wrapper.py` to block cached slides whenever offline (`disconnected` / `testing`), keep the setup overlay locked during credential checks, and display a 40-second connection stability countdown (`connected_wait`) before launching the slideshow
+- Added `CONNECT_LOCK` concurrency protection and UUID-based duplicate profile cleanup in `setup-portal.py` so re-entered networks cleanly replace older NetworkManager profiles
+- Consolidated event-only Wi-Fi and service logs under `/mnt/frame/logs/{wifi,kiosk}/` and symlinked `~/frame/logs` (ignored in `.gitignore`)
 
 ## 2026-11-18: Scheduled display power automation
 - Configured `kiosk` user crontab (`UID 1001`, `WAYLAND_DISPLAY=wayland-0`) to power off `HDMI-A-1` at 2:00 AM and power it back on at 5:00 AM PST via `wlr-randr`
