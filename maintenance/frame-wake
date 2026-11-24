@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Gently spin up /mnt/frame before Docker starts so Postgres never hits a cold-drive timeout
+ls /mnt/frame >/dev/null 2>&1 || true
+sleep 6
+
+# Start Immich first, wait for healthy/ready, then start ImmichFrame and turn HDMI back on
+docker compose -f /home/admin/frame/immich/docker-compose.yml up -d >/dev/null 2>&1 || true
+for _ in $(seq 1 30); do
+  curl -sf http://127.0.0.1:2283/api/server/ping >/dev/null 2>&1 && break
+  sleep 2
+done
+
+docker compose -f /home/admin/frame/immichframe/docker-compose.yml up -d >/dev/null 2>&1 || true
+XDG_RUNTIME_DIR=/run/user/1001 WAYLAND_DISPLAY=wayland-0 /usr/bin/wlr-randr --output HDMI-A-1 --on 2>/dev/null || true
+systemctl start kiosk-refresh.service 2>/dev/null || true

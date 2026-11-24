@@ -2,6 +2,11 @@
 
 Newest on top. One entry per change: what, and why if it isn't obvious.
 
+## 2026-11-23: Overnight drive rest schedule & USB quirk hardening
+- Added `maintenance/frame-sleep` (02:15 AM) and `maintenance/frame-wake` (05:00 AM) to cleanly stop Immich/ImmichFrame after the 02:00 AM DB backup so `/mnt/frame` spins down cleanly overnight and spins up before Docker starts at 05:00 AM
+- Added `usb-storage.quirks=0bc2:231a:u usbcore.autosuspend=-1` to `/boot/firmware/cmdline.txt`
+- Updated `maintenance/frame-status` to detect `emergency_ro` / read-only mounts on `/mnt/frame`
+
 ## 2026-11-21: Maintenance suite (M1-M3) and Immich v3 update
 - Added `maintenance/frame-status` (`/usr/local/bin/frame-status`) for single-screen read-only health checks across systemd units, Docker stacks, Wayland `HDMI-A-1` state, Wi-Fi wrapper mode, thermals/disk, and latest DB backup
 - Added `maintenance/deploy` (`/usr/local/bin/deploy`) for dry-run diffing and selective syncing/reloading from `~/frame` to live system paths and `kiosk` crontab

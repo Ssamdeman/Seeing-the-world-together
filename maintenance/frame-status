@@ -84,7 +84,12 @@ mem=$(free -h | awk '/^Mem:/{print $3 "/" $2}')
 root_df=$(df -h / | awk 'NR==2{print $3 "/" $2 " (" $5 ")"}')
 mnt_df=$(df -h /mnt/frame | awk 'NR==2{print $3 "/" $2 " (" $5 ")"}')
 ok "Temp: $temp | RAM: $mem"
-ok "Disk / : $root_df | /mnt/frame : $mnt_df"
+mnt_opts=$(findmnt -no OPTIONS /mnt/frame 2>/dev/null || echo "unmounted")
+if [[ "$mnt_opts" == *"emergency_ro"* || ",$mnt_opts," == *",ro,"* || "$mnt_opts" == "unmounted" ]]; then
+  fail "/mnt/frame mount is read-only or unmounted ($mnt_opts)"
+else
+  ok "Disk / : $root_df | /mnt/frame : $mnt_df (rw)"
+fi
 
 latest_bak=$(ls -t /mnt/frame/immich/library/backups/* 2>/dev/null | head -n1 || true)
 if [ -n "$latest_bak" ]; then
